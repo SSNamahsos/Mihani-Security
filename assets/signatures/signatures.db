@@ -1,0 +1,79 @@
+# MihaniSecurity bundled signature database
+# Format: [KIND] match|name|severity|family
+# KINDs: HASH (sha256), PE-STRING (substring in file), PE-IMPORT (DLL name),
+#        YARA-LITE (substring; expression language deferred to v2)
+# Severity: low | medium | high | critical
+#
+# This pack is shipped with the installer next to the binaries
+# (signatures/signatures.db). On first run the service copies it into
+# %ProgramData%\MihaniSecurity\ and uses it as the active database.
+# Users can extend it from Settings → "Import signature update".
+
+# --- EICAR test signatures (keep for end-to-end verification) --------------
+[HASH] 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f|EICAR Test File|medium|EICAR
+[PE-STRING] X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*|EICAR Test String|medium|EICAR
+
+# --- Credential & token theft (Discord, Steam, browsers) -------------------
+[PE-STRING] token=|Token exfil attempt (Discord/Steam pattern)|critical|CredentialTheft
+[PE-STRING] Login token captured|Discord token capture|critical|CredentialTheft
+[PE-STRING] loginusers.vdf|Steam login users access|critical|CredentialTheft
+[PE-STRING] ssfn|Steam guard file access|critical|CredentialTheft
+[PE-STRING] Local Storage\leveldb|Discord token storage access|critical|CredentialTheft
+[PE-STRING] discord.com/api/webhooks|Discord webhook exfiltration|critical|Exfiltration
+[PE-STRING] discord.com/api/v9/users/@me|Discord user profile fetch|critical|Exfiltration
+[PE-STRING] chrome\user data\default\login data|Chrome credential store access|critical|CredentialTheft
+[PE-STRING] edge\user data\default\login data|Edge credential store access|critical|CredentialTheft
+[PE-STRING] firefox\profiles\|Firefox profile access|high|CredentialTheft
+[PE-STRING] cookies.sqlite|Browser cookie database access|high|CredentialTheft
+[PE-STRING] .ldb|LevelDB store access (token caches)|high|CredentialTheft
+[PE-STRING] .log|LevelDB log access (token caches)|high|CredentialTheft
+[PE-STRING] wab\telegram|Telegram session access|critical|CredentialTheft
+[PE-STRING] tdata|Telegram session data access|critical|CredentialTheft
+[PE-STRING] \session.json|WhatsApp/Web session access|critical|CredentialTheft
+[PE-STRING] api.telegram.org/bot|Telegram bot token in file|critical|CredentialTheft
+[PE-STRING] ewcl|Rust cheats token (EWCL) access|high|CredentialTheft
+
+# --- Common stealers and credential dumpers ---------------------------------
+[PE-STRING] mimikatz|Mimikatz credential tool|high|CredentialTheft
+[PE-STRING] LaZagne|LaZagne credential tool|high|CredentialTheft
+[PE-STRING] Invoke-Mimikatz|PowerShell Mimikatz loader|high|CredentialTheft
+[PE-STRING] sekurlsa::logonpasswords|LSASS credential dump command|critical|CredentialTheft
+[PE-STRING] lsass.exe|LSASS process access|critical|CredentialTheft
+[PE-STRING] comsvcs.dll|LSASS minidump export (comsvcs)|critical|CredentialTheft
+[PE-STRING] procdump -ma|Process dump of protected process|critical|CredentialTheft
+[PE-STRING] wce.exe|Windows Credential Editor|high|CredentialTheft
+[PE-STRING] pwdump|Password hash dumper|high|CredentialTheft
+[PE-STRING] cain.exe|Cain & Abel password tool|high|CredentialTheft
+[PE-STRING] fgdump|Fgdump credential dumper|high|CredentialTheft
+
+# --- Wiper & destructive behaviour ------------------------------------------
+[PE-STRING] vssadmin delete shadows /all|Shadow copy deletion|critical|Wiper
+[PE-STRING] wbadmin delete catalog|Backup catalog deletion|critical|Wiper
+[PE-STRING] bcdedit /set {default} bootstatuspolicy ignoreallfailures|Safe-boot tampering|critical|Bootkit
+[PE-STRING] bcdedit /set safeboot minimal|Safe mode boot tampering|critical|Bootkit
+[PE-STRING] format c: /q|Force format of system drive|critical|Wiper
+[PE-STRING] del /f /q c:\windows\system32|System32 deletion attempt|critical|Wiper
+
+# --- Suspicious commands -----------------------------------------------------
+[PE-STRING] cmd.exe /c |Command shell spawn string|high|SuspiciousCommands
+[PE-STRING] powershell -nop -w hidden |PowerShell hidden window|high|SuspiciousCommands
+[PE-STRING] powershell -enc |Encoded PowerShell command|high|SuspiciousCommands
+[PE-STRING] powershell -windowstyle hidden|PowerShell hidden window|high|SuspiciousCommands
+[PE-STRING] -w hidden -ep bypass|Hidden PowerShell with bypass|high|SuspiciousCommands
+[PE-STRING] iwr -useb|Download-and-execute via Invoke-WebRequest|high|Downloader
+[PE-STRING] Invoke-WebRequest -Uri|Remote payload download|high|Downloader
+[PE-STRING] reg add ... autorun|Registry autorun modification|high|Persistence
+[PE-STRING] schtasks /create /sc onlogon|Scheduled task persistence|high|Persistence
+[PE-STRING] net user /add|New user account creation|critical|Persistence
+[PE-STRING] net localgroup administrators /add|Admin group escalation|critical|PrivilegeEscalation
+[PE-STRING] whoami /priv|Privilege enumeration|low|Reconnaissance
+[PE-STRING] ipconfig /all|Network configuration enumeration|low|Reconnaissance
+[PE-STRING] netstat -ano|Network connection enumeration|low|Reconnaissance
+[PE-STRING] tasklist /svc|Process/service enumeration|low|Reconnaissance
+
+# --- Suspicious PE imports ---------------------------------------------------
+[PE-IMPORT] wininet.dll|Mimicry: Internet access without UI|low|SuspiciousImports
+[PE-IMPORT] crypt32.dll|Suspicious crypto usage|low|SuspiciousImports
+[PE-IMPORT] wtsapi32.dll|Session hijacking primitives|medium|SuspiciousImports
+[PE-IMPORT] dbghelp.dll|Process introspection / dumps|medium|SuspiciousImports
+[PE-IMPORT] psapi.dll|Process enumeration / memory access|low|SuspiciousImports

@@ -1,0 +1,51 @@
+name: build-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+
+      - name: Restore signing key
+        shell: powershell
+        env:
+          MIHANI_SIGN_PFX: ${{ secrets.MIHANI_SIGN_PFX }}
+        run: |
+          if ("$env:MIHANI_SIGN_PFX" -ne "") {
+            $bytes = [Convert]::FromBase64String($env:MIHANI_SIGN_PFX)
+            [IO.File]::WriteAllBytes("deploy\mihani-sign.pfx", $bytes)
+            "signing key restored"
+          } else {
+            "no signing key - build will be unsigned"
+          }
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist\MihaniSecurity Setup.exe
+          generate_release_notes: true
