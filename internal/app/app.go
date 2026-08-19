@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -117,12 +118,31 @@ func (a *App) notifyThreat(v events.Verdict) {
 		Body:  v.Description,
 	}
 
-	if installPath != "" {
-		if _, err := os.Stat(filepath.Join(installPath, "icon.png")); err == nil {
-			n.Icon = filepath.Join(installPath, "icon.png")
+	if icon := findIconPath(installPath); icon != "" {
+		n.Icon = icon
+	}
+	go func() {
+		if err := n.Push(); err != nil {
+			log.Printf("toast push failed: %v", err)
+		}
+	}()
+}
+
+func findIconPath(installPath string) string {
+	candidates := []string{filepath.Join(installPath, "icon.png")}
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		for i := 0; i < 3; i++ {
+			candidates = append(candidates, filepath.Join(dir, "icon.png"))
+			dir = filepath.Dir(dir)
 		}
 	}
-	go func() { _ = n.Push() }()
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			return c
+		}
+	}
+	return ""
 }
 
 func (a *App) GetSettings() (config.Config, error) {

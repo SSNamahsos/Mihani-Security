@@ -150,3 +150,42 @@ func TestMatchMemory(t *testing.T) {
 		t.Error("memory scan flagged plain text")
 	}
 }
+
+func TestMatchFileSkipsStringRulesForTextDocs(t *testing.T) {
+	dir := t.TempDir()
+	db, err := Open(filepath.Join(dir, "sig.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := filepath.Join(dir, "lesson.html")
+	docData := `<html><body><style>.logo{color:#fff}</style><code>vssadmin delete shadows /all</code></body></html>`
+	if err := os.WriteFile(doc, []byte(docData), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := db.MatchFile(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 0 {
+		t.Errorf("html doc matched %d string rules: %+v", len(hits), hits)
+	}
+
+	exe := filepath.Join(dir, "stealer.exe")
+	if err := os.WriteFile(exe, []byte("MZ"+docData), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hits, err = db.MatchFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shadow bool
+	for _, h := range hits {
+		if strings.Contains(h.Sig.Match, "vssadmin") {
+			shadow = true
+		}
+	}
+	if !shadow {
+		t.Errorf("executable content did not match wiper string rule: %+v", hits)
+	}
+}

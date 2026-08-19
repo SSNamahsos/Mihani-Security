@@ -115,6 +115,9 @@ func (d *DB) MatchFile(path string) ([]Match, error) {
 			}
 		case KindString, KindYara:
 
+			if isTextDoc(path) {
+				continue
+			}
 			if strings.Contains(str, s.Match) {
 				hits = append(hits, Match{Sig: s, FilePath: path, Evidence: truncate(s.Match, 80)})
 			}
@@ -317,4 +320,14 @@ func (d *DB) AppendFile(src string) (added int, err error) {
 		fmt.Fprintf(f, "[%s] %s|%s|%s|%s\n", s.Kind, s.Match, s.Name, s.Severity, s.Family)
 	}
 	return len(batch), nil
+}
+
+var textDocExts = map[string]bool{
+	".html": true, ".htm": true, ".txt": true, ".md": true, ".markdown": true,
+	".css": true, ".xml": true, ".json": true, ".yml": true, ".yaml": true,
+	".csv": true, ".svg": true, ".log": true, ".nfo": true, ".rst": true,
+}
+
+func isTextDoc(path string) bool {
+	return textDocExts[strings.ToLower(filepath.Ext(path))]
 }

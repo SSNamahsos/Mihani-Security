@@ -1,9 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -59,10 +59,8 @@ func Run(mode string) error {
 
 	dbPath := filepath.Join(cfg.General.DataPath, "signatures.db")
 
-	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) {
-		if err := seedSignaturesFromBundle(dbPath); err != nil {
-			log.Warn().Err(err).Msg("bundled signature copy failed")
-		}
+	if err := seedSignaturesFromBundle(dbPath); err != nil {
+		log.Warn().Err(err).Msg("bundled signature sync failed")
 	}
 	sigs, err := sigpkg.Open(dbPath)
 	if err != nil {
@@ -545,6 +543,10 @@ func seedSignaturesFromBundle(dst string) error {
 		data, err := os.ReadFile(c)
 		if err != nil {
 			return err
+		}
+		cur, err := os.ReadFile(dst)
+		if err == nil && bytes.Equal(cur, data) {
+			return nil
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err

@@ -11,6 +11,16 @@ import (
 
 const maxInspectBytes = 32 << 20
 
+var textDocExts = map[string]bool{
+	".html": true, ".htm": true, ".txt": true, ".md": true, ".markdown": true,
+	".css": true, ".xml": true, ".json": true, ".yml": true, ".yaml": true,
+	".csv": true, ".svg": true, ".log": true, ".nfo": true, ".rst": true,
+}
+
+func isTextDoc(path string) bool {
+	return textDocExts[strings.ToLower(filepath.Ext(path))]
+}
+
 var credentialStoreIndicators = []struct{ Needle, Label string }{
 	{`loginusers.vdf`, "Steam login store"},
 	{`config.vdf`, "Steam config/auth ticket store"},
@@ -72,6 +82,9 @@ type FileFinding struct {
 func InspectFile(path string) []FileFinding {
 	fi, err := os.Stat(path)
 	if err != nil || fi.IsDir() || fi.Size() == 0 || fi.Size() > maxInspectBytes {
+		return nil
+	}
+	if isTextDoc(path) {
 		return nil
 	}
 	data, err := os.ReadFile(path)

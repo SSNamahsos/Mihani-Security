@@ -14,7 +14,6 @@
 [PE-STRING] X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*|EICAR Test String|medium|EICAR
 
 # --- Credential & token theft (Discord, Steam, browsers) -------------------
-[PE-STRING] token=|Token exfil attempt (Discord/Steam pattern)|critical|CredentialTheft
 [PE-STRING] Login token captured|Discord token capture|critical|CredentialTheft
 [PE-STRING] loginusers.vdf|Steam login users access|critical|CredentialTheft
 [PE-STRING] ssfn|Steam guard file access|critical|CredentialTheft
@@ -25,8 +24,6 @@
 [PE-STRING] edge\user data\default\login data|Edge credential store access|critical|CredentialTheft
 [PE-STRING] firefox\profiles\|Firefox profile access|high|CredentialTheft
 [PE-STRING] cookies.sqlite|Browser cookie database access|high|CredentialTheft
-[PE-STRING] .ldb|LevelDB store access (token caches)|high|CredentialTheft
-[PE-STRING] .log|LevelDB log access (token caches)|high|CredentialTheft
 [PE-STRING] wab\telegram|Telegram session access|critical|CredentialTheft
 [PE-STRING] tdata|Telegram session data access|critical|CredentialTheft
 [PE-STRING] \session.json|WhatsApp/Web session access|critical|CredentialTheft
