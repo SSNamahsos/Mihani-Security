@@ -6,6 +6,8 @@ frontend/node_modules/
 frontend/dist/
 deploy/*.pfx
 deploy/*.cer
+rsrc_windows_*.syso
+windows.syso*
 *.log
 .DS_Store
 Thumbs.db
