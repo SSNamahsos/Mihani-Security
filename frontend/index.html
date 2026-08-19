@@ -1419,6 +1419,10 @@ function renderExclusions() {
 
 async function pickFolder() {
   try {
+    const p = await call("PickFolder");
+    if (p) return p;
+  } catch (e) {}
+  try {
     if (window.runtime && window.runtime.OpenDirectoryDialog) {
       return await window.runtime.OpenDirectoryDialog({ title: t("t_pick_folder") });
     }
@@ -1426,6 +1430,10 @@ async function pickFolder() {
   return null;
 }
 async function pickFile() {
+  try {
+    const p = await call("PickFile");
+    if (p) return p;
+  } catch (e) {}
   try {
     if (window.runtime && window.runtime.OpenFileDialog) {
       return await window.runtime.OpenFileDialog({ title: t("t_pick_folder"), filters: [{ displayName: "Signature database", pattern: "*.db" }] });

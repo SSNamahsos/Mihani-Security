@@ -1,5 +1,7 @@
 # MihaniSecurity
 
+**English** · [فارسی (Persian)](README.fa.md)
+
 Open-source Windows anti-malware with real-time **credential and token theft
 protection** (Steam, Discord, browser cookies/sessions), on-demand scanning,
 behavioral detection, quarantine, Windows Security Center registration, and a

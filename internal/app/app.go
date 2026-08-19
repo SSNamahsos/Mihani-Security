@@ -297,6 +297,25 @@ func (a *App) ImportSignatures(path string) error {
 
 func (a *App) WinMinimize() { runtime.WindowMinimise(a.ctx) }
 
+func (a *App) PickFolder() string {
+	p, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Choose a folder"})
+	if err != nil || p == "" {
+		return ""
+	}
+	return p
+}
+
+func (a *App) PickFile() string {
+	p, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   "Choose a file",
+		Filters: []runtime.FileFilter{{DisplayName: "Signature database", Pattern: "*.db"}},
+	})
+	if err != nil || p == "" {
+		return ""
+	}
+	return p
+}
+
 func (a *App) WinMaximize() {
 	if runtime.WindowIsMaximised(a.ctx) {
 		runtime.WindowUnmaximise(a.ctx)
