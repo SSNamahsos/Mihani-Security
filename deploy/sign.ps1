@@ -20,6 +20,8 @@ $targets = @(
   (Join-Path $root "build\bin\MihaniSecurity.exe"),
   (Join-Path $root "build\bin\mihanisecurity-service.exe")
 )
+$setup = Join-Path $root "dist\MihaniSecurity Setup.exe"
+if (Test-Path $setup) { $targets += $setup }
 foreach ($t in $targets) {
   & $sig sign /f $pfx /p $certPw /fd SHA256 $t 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) { Write-Error "signing failed: $t"; exit 1 }

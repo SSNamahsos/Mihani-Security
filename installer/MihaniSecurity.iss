@@ -12,7 +12,7 @@
 ; our own files still being on disk.
 
 #define MyAppName "MihaniSecurity"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "MihaniSecurity Project"
 #define MyAppExeName "MihaniSecurity.exe"
 #define MyServiceExe "mihanisecurity-service.exe"
