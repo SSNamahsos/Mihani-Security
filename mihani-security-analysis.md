@@ -214,3 +214,12 @@ Tests added for: IPC auth, quarantine encryption round-trip + legacy migration, 
 | — | Closing the GUI stops the dashboard (no tray) | **Done** — closing hides to a native tray icon (dedicated message-loop thread; message-only window `MihaniSecurityTray`); tray menu Open/Exit; `HideWindowOnClose` + `hide_in_tray` config (default true, presence-aware merge for legacy configs). Protection itself always ran in the service and is unaffected by GUI state | `pkg/winapi/tray.go`, `internal/app/app.go`, `internal/config/config.go`, `main.go` |
 
 Tray tests: window creation on a dedicated thread, double-click and menu callbacks delivered through the tray message loop.
+
+---
+
+## Resolution status (v1.0.5)
+
+| # | Finding | Status | Where |
+|---|---------|--------|-------|
+| - | RT toggle error "not connected" after service restart | **Done** - App.Connect() no longer no-ops when the client object exists but the pipe dropped; it now checks Connected() and reconnects via ConnectRetry. Frontend retries ConnectService with exponential backoff (2s..30s, resets on success). Integration test added: client reconnects after server restart and calls succeed | `internal/app/app.go`, `frontend/index.html`, `internal/ipc/reconnect_test.go` |
+| - | Stray "?" rendered top-left of the UI | **Done** - literal "?" bytes before `<!DOCTYPE html>` in `frontend/index.html` removed (quirks-mode + stray text node); dist regenerated; installed exe verified clean | `frontend/index.html` |

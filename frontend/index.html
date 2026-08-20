@@ -1,4 +1,4 @@
-?<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" data-theme="mihani">
 <head>
 <meta charset="utf-8">
@@ -995,7 +995,7 @@ function defaultSettings() {
     whitelist:["steam.exe","steamwebhelper.exe","discord.exe","discordcanary.exe","discordptb.exe","msedge.exe","chrome.exe","firefox.exe","brave.exe","opera.exe"],
     whitelist_domains:["steampowered.com","steamcommunity.com","discord.com","discordapp.com","discord.gg","google.com","youtube.com","github.com"],
     exclusions:[],
-    theme:"mihani", language:"en", hide_in_tray:false, schema:1,
+    theme:"mihani", language:"en", hide_in_tray:true, schema:1,
   };
 }
 
@@ -1628,18 +1628,36 @@ if (settings && settings.notifications && settings.notifications.show_toast) {
       activeScan = null;
       renderScanResult(data);
       break;
-    case "status":
+case "status":
       status = data;
       connected = true;
+      reconnectBackoff = 0;
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       renderStatus();
       break;
-    case "ipc_disconnected":
+case "ipc_disconnected":
       connected = false;
       setPill("offline");
       showToast("info", t("t_reconnect"), "");
-      setTimeout(() => { call("ConnectService").then(refreshStatus).catch(() => {}); }, 1500);
+      scheduleReconnect(1500);
       break;
   }
+}
+
+let reconnectBackoff = 0;
+let reconnectTimer = null;
+function scheduleReconnect(delay) {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(async () => {
+    try {
+      await call("ConnectService");
+      await refreshStatus();
+      reconnectBackoff = 0;
+    } catch (e) {
+      scheduleReconnect(Math.min(30000, 2000 * Math.pow(2, reconnectBackoff)));
+      reconnectBackoff++;
+    }
+  }, delay);
 }
 
 

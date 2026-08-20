@@ -95,15 +95,17 @@ func (a *App) quitApp() {
 func (a *App) Connect() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.cli != nil {
-		return nil
-	}
-	pipeName := ipc.PipeName
-	a.cli = ipc.NewClient(pipeName, a.onBroadcast)
-	a.cli.OnDisconnect = func() {
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "ipc_disconnected", true)
+	if a.cli == nil {
+		pipeName := ipc.PipeName
+		a.cli = ipc.NewClient(pipeName, a.onBroadcast)
+		a.cli.OnDisconnect = func() {
+			if a.ctx != nil {
+				runtime.EventsEmit(a.ctx, "ipc_disconnected", true)
+			}
 		}
+	}
+	if a.cli.Connected() {
+		return nil
 	}
 	return a.cli.ConnectRetry(10 * time.Second)
 }
