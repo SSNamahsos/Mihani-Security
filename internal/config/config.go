@@ -141,6 +141,7 @@ func Default() *Config {
 			MaxSizeMB:  512,
 			MaxAgeDays: 30,
 			AutoPurge:  true,
+			Encrypt:    true,
 		},
 		Notifications: Notifications{
 			ShowTrayOnThreat: true,

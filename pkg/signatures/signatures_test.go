@@ -1,6 +1,8 @@
 package signatures
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -187,5 +189,72 @@ func TestMatchFileSkipsStringRulesForTextDocs(t *testing.T) {
 	}
 	if !shadow {
 		t.Errorf("executable content did not match wiper string rule: %+v", hits)
+	}
+}
+
+func TestPEImportsSystemDLL(t *testing.T) {
+	sys := os.Getenv("SystemRoot")
+	if sys == "" {
+		sys = `C:\Windows`
+	}
+	candidate := filepath.Join(sys, "System32", "wininet.dll")
+	data, err := os.ReadFile(candidate)
+	if err != nil {
+		t.Skip("wininet.dll not available for import test")
+	}
+	imports := peImports(data)
+	if len(imports) == 0 {
+		t.Fatal("peImports returned nothing for wininet.dll")
+	}
+	found := false
+	for _, imp := range imports {
+		if strings.EqualFold(imp, "ntdll.dll") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("ntdll.dll not among imports: %v", imports)
+	}
+}
+
+func TestPEImportsRejectsNonPE(t *testing.T) {
+	if got := peImports([]byte("MZgarbage")); got != nil {
+		t.Fatalf("expected nil, got %v", got)
+	}
+	if got := peImports([]byte("plain text file")); got != nil {
+		t.Fatalf("expected nil, got %v", got)
+	}
+}
+
+func TestMatchFileSizeCapHashesOnly(t *testing.T) {
+	dir := t.TempDir()
+	db, err := Open(filepath.Join(dir, "sig.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	huge := filepath.Join(dir, "huge.bin")
+	buf := make([]byte, maxStringScanBytes+64)
+	for i := range buf {
+		buf[i] = 'A'
+	}
+	if err := os.WriteFile(huge, buf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(buf)
+	sigFile := filepath.Join(dir, "extra.sig")
+	line := "[HASH] " + hex.EncodeToString(sum[:]) + "|hashcap|high|test\n"
+	if err := os.WriteFile(sigFile, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.AppendFile(sigFile); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := db.MatchFile(huge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0].Sig.Name != "hashcap" {
+		t.Fatalf("expected single hash hit for oversized file, got %v", hits)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -63,10 +64,24 @@ type Server struct {
 	clients  map[net.Conn]struct{}
 	closed   bool
 	onMsg    func(c net.Conn, m Msg)
+	allowed  []string
+	authFn   func(c net.Conn) (string, error)
 }
 
 func NewServer(pipeName string, onMsg func(c net.Conn, m Msg)) *Server {
 	return &Server{path: pipeName, onMsg: onMsg, clients: map[net.Conn]struct{}{}}
+}
+
+func (s *Server) SetAllowedClientPaths(paths []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.allowed = append([]string(nil), paths...)
+}
+
+func (s *Server) SetClientResolver(fn func(c net.Conn) (string, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.authFn = fn
 }
 
 func (s *Server) Listen() error {
@@ -119,6 +134,24 @@ func (s *Server) serve(c net.Conn) {
 		s.mu.Unlock()
 		c.Close()
 	}()
+
+	s.mu.Lock()
+	allowed := append([]string(nil), s.allowed...)
+	authFn := s.authFn
+	s.mu.Unlock()
+	resolve := authFn
+	if resolve == nil {
+		resolve = clientImagePath
+	}
+	if allowed == nil {
+		allowed = defaultAllowedPaths()
+	}
+	path, err := resolve(c)
+	if err != nil || !isAllowedPath(path, allowed) {
+		log.Printf("ipc: rejected client (path=%q err=%v)", path, err)
+		return
+	}
+
 	rd := bufio.NewReaderSize(c, 64<<10)
 	for {
 		line, err := readLine(rd)

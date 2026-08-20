@@ -115,7 +115,42 @@ func (d *Tokens) Evaluate(e events.Event) []events.Verdict {
 	if name == "" && e.Process.Path != "" {
 		name = strings.ToLower(filepath.Base(e.Process.Path))
 	}
-	if tokens.IsLegitimateOwner(sf.App, sf.Pattern, name) || d.trusted(name) {
+	legitOwner := tokens.IsLegitimateOwner(sf.App, sf.Pattern, name)
+	if legitOwner {
+		ok, why := tokens.TrustedOwnerProcess(name, e.Process.Path)
+		if ok {
+			return nil
+		}
+		sev := events.SeverityCritical
+		evidence := []string{
+			"protected_store=" + sf.Path,
+			"application=" + sf.App,
+			"accessing_process=" + name,
+			"process_image=" + e.Process.Path,
+			"access=" + e.Access,
+			"owner_verification=" + why,
+		}
+		if isUntrustedLocation(e.Process.Path) {
+			evidence = append(evidence, "origin=untrusted_location")
+		}
+		if owners := tokens.LegitimateOwnersFor(sf.App); len(owners) > 0 {
+			evidence = append(evidence, "expected_owner="+strings.Join(owners, ","))
+		}
+		return []events.Verdict{{
+			ID:          newID(),
+			Time:        time.Now(),
+			Severity:    sev,
+			Threat:      events.ThreatTokenTheft,
+			Name:        "Spoofed " + sf.App + " process accessing credential store",
+			Description: e.Process.Name + " claims to be " + sf.App + " but failed signature verification (" + why + ").",
+			Path:        firstNonEmpty(e.Process.Path, e.Path),
+			TargetPath:  e.Path,
+			Process:     e.Process,
+			Evidence:    evidence,
+			Action:      events.ActionBlock,
+		}}
+	}
+	if d.trusted(name) {
 		return nil
 	}
 
@@ -219,6 +254,58 @@ func (d *BehaviorDetector) registerDefaults() {
 				return false
 			}
 			return strings.Contains(vn, "shell") || strings.Contains(vn, "userinit") || strings.Contains(k, "userinit")
+		},
+	}}
+	d.policies["ifeo_debugger"] = []BehaviorRule{{
+		Name:        "Image File Execution Options tampering",
+		Description: "A process installed an IFEO Debugger or SilentProcessExit handler",
+		Severity:    events.SeverityCritical,
+		Threat:      events.ThreatPersistence,
+		Match: func(e events.Event) bool {
+			if e.Registry == nil {
+				return false
+			}
+			k := strings.ToLower(e.Registry.Key)
+			vn := strings.ToLower(e.Registry.Value)
+			if !strings.Contains(k, "image file execution options") {
+				return false
+			}
+			return strings.Contains(vn, "debugger") || strings.Contains(k, "silentprocessexit")
+		},
+		Evidence: func(e events.Event) []string {
+			return []string{"key=" + e.Registry.Key, "value=" + e.Registry.Value}
+		},
+	}}
+	d.policies["appinit_dlls"] = []BehaviorRule{{
+		Name:        "AppInit_DLLs modification",
+		Description: "A process modified AppInit_DLLs, a system-wide DLL preload hook",
+		Severity:    events.SeverityCritical,
+		Threat:      events.ThreatPersistence,
+		Match: func(e events.Event) bool {
+			if e.Registry == nil {
+				return false
+			}
+			vn := strings.ToLower(e.Registry.Value)
+			return strings.Contains(vn, "appinit_dlls") || strings.Contains(vn, "requireSignedAppInitDlls")
+		},
+		Evidence: func(e events.Event) []string {
+			return []string{"key=" + e.Registry.Key, "value=" + e.Registry.Value}
+		},
+	}}
+	d.policies["startup_folder"] = []BehaviorRule{{
+		Name:        "Startup folder planting",
+		Description: "A file was created in a Startup directory",
+		Severity:    events.SeverityHigh,
+		Threat:      events.ThreatPersistence,
+		Match: func(e events.Event) bool {
+			if e.Kind != events.EventFileCreate && e.Kind != events.EventFileModify {
+				return false
+			}
+			p := strings.ToLower(e.Path)
+			return strings.Contains(p, "\\startup\\")
+		},
+		Evidence: func(e events.Event) []string {
+			return []string{"path=" + e.Path}
 		},
 	}}
 	d.policies["suspicious_spawn"] = []BehaviorRule{{

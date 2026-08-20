@@ -13,8 +13,9 @@
   "info": {
     "companyName": "MihaniSecurity Project",
     "productName": "MihaniSecurity",
-    "productVersion": "1.0.2",
+    "productVersion": "1.0.3",
     "copyright": "Copyright © 2024 MihaniSecurity Contributors",
     "comments": "Open-source Windows anti-malware with credential-theft protection"
   }
 }
+

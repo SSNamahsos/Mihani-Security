@@ -3,6 +3,7 @@ package signatures
 import (
 	"bufio"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -86,8 +87,11 @@ func (d *DB) LoadedAt() time.Time {
 
 func (d *DB) Reload() error { return d.reload() }
 
+const maxStringScanBytes = 32 << 20
+
 func (d *DB) MatchFile(path string) ([]Match, error) {
-	if _, err := os.Stat(path); err != nil {
+	st, err := os.Stat(path)
+	if err != nil {
 		return nil, err
 	}
 	d.mu.RLock()
@@ -98,6 +102,10 @@ func (d *DB) MatchFile(path string) ([]Match, error) {
 		return nil, nil
 	}
 
+	if st.Size() > maxStringScanBytes {
+		return d.matchHashesOnly(path, sigs)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -106,6 +114,8 @@ func (d *DB) MatchFile(path string) ([]Match, error) {
 	hexSum := hex.EncodeToString(sum[:])
 	str := string(data)
 
+	var imports []string
+	importsParsed := false
 	var hits []Match
 	for _, s := range sigs {
 		switch s.Kind {
@@ -122,13 +132,42 @@ func (d *DB) MatchFile(path string) ([]Match, error) {
 				hits = append(hits, Match{Sig: s, FilePath: path, Evidence: truncate(s.Match, 80)})
 			}
 		case KindImport:
-
-			if len(data) < 0x40 || data[0] != 'M' || data[1] != 'Z' {
+			if !importsParsed {
+				imports = peImports(data)
+				importsParsed = true
+			}
+			if len(imports) == 0 {
 				continue
 			}
-			if containsImport(data, s.Match) {
-				hits = append(hits, Match{Sig: s, FilePath: path, Evidence: "import=" + s.Match})
+			for _, imp := range imports {
+				if strings.EqualFold(imp, s.Match) {
+					hits = append(hits, Match{Sig: s, FilePath: path, Evidence: "import=" + s.Match})
+					break
+				}
 			}
+		}
+	}
+	return hits, nil
+}
+
+func (d *DB) matchHashesOnly(path string, sigs []Signature) ([]Match, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+	hexSum := hex.EncodeToString(h.Sum(nil))
+	var hits []Match
+	for _, s := range sigs {
+		if s.Kind != KindHash {
+			continue
+		}
+		if strings.EqualFold(hexSum, s.Match) {
+			hits = append(hits, Match{Sig: s, FilePath: path, Evidence: "sha256=" + hexSum})
 		}
 	}
 	return hits, nil
@@ -219,31 +258,98 @@ func parseLine(line string) (Signature, bool) {
 	}, true
 }
 
-func containsImport(data []byte, dll string) bool {
-	if len(dll) < 3 {
-		return false
+type peSection struct {
+	virtualAddress uint32
+	virtualSize    uint32
+	rawSize        uint32
+	rawOffset      uint32
+}
+
+func peImports(data []byte) []string {
+	if len(data) < 0x40 || data[0] != 'M' || data[1] != 'Z' {
+		return nil
 	}
-	needle := []byte(strings.ToLower(dll))
-	for i := 0; i+len(needle) <= len(data); i++ {
-		if data[i] != needle[0] {
+	eLfanew := int(binary.LittleEndian.Uint32(data[0x3C:0x40]))
+	if eLfanew+44 > len(data) {
+		return nil
+	}
+	if data[eLfanew] != 'P' || data[eLfanew+1] != 'E' || data[eLfanew+2] != 0 || data[eLfanew+3] != 0 {
+		return nil
+	}
+	magic := binary.LittleEndian.Uint16(data[eLfanew+24 : eLfanew+26])
+	var ddOffset int
+	switch magic {
+	case 0x10B:
+		ddOffset = 96
+	case 0x20B:
+		ddOffset = 112
+	default:
+		return nil
+	}
+	secCount := int(binary.LittleEndian.Uint16(data[eLfanew+6 : eLfanew+8]))
+	optSize := int(binary.LittleEndian.Uint16(data[eLfanew+20 : eLfanew+22]))
+	secStart := eLfanew + 24 + optSize
+	if secCount < 1 || secCount > 96 || secStart+secCount*40 > len(data) {
+		return nil
+	}
+	sections := make([]peSection, 0, secCount)
+	for i := 0; i < secCount; i++ {
+		base := secStart + i*40
+		sections = append(sections, peSection{
+			virtualAddress: binary.LittleEndian.Uint32(data[base+12 : base+16]),
+			virtualSize:    binary.LittleEndian.Uint32(data[base+8 : base+12]),
+			rawSize:        binary.LittleEndian.Uint32(data[base+16 : base+20]),
+			rawOffset:      binary.LittleEndian.Uint32(data[base+20 : base+24]),
+		})
+	}
+	toOffset := func(rva uint32) (int, bool) {
+		for _, s := range sections {
+			span := s.virtualSize
+			if s.rawSize > span {
+				span = s.rawSize
+			}
+			if span > 0 && rva >= s.virtualAddress && rva-s.virtualAddress < span {
+				return int(s.rawOffset + (rva - s.virtualAddress)), true
+			}
+		}
+		return 0, false
+	}
+	ddBase := eLfanew + 24 + ddOffset
+	if ddBase+16 > len(data) {
+		return nil
+	}
+	impRVA := binary.LittleEndian.Uint32(data[ddBase+8 : ddBase+12])
+	if impRVA == 0 {
+		return nil
+	}
+	impOff, ok := toOffset(impRVA)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for i := 0; i < 4096; i++ {
+		desc := impOff + i*20
+		if desc+20 > len(data) {
+			break
+		}
+		nameRVA := binary.LittleEndian.Uint32(data[desc+12 : desc+16])
+		if nameRVA == 0 {
+			break
+		}
+		off, ok := toOffset(nameRVA)
+		if !ok {
 			continue
 		}
-		match := true
-		for j := 1; j < len(needle); j++ {
-			c := data[i+j]
-			if c >= 'A' && c <= 'Z' {
-				c += 32
-			}
-			if c != needle[j] {
-				match = false
-				break
-			}
+		end := off
+		for end < len(data) && end-off < 512 && data[end] != 0 {
+			end++
 		}
-		if match {
-			return true
+		if end == off {
+			continue
 		}
+		out = append(out, string(data[off:end]))
 	}
-	return false
+	return out
 }
 
 func truncate(s string, n int) string {

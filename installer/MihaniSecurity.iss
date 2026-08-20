@@ -12,7 +12,7 @@
 ; our own files still being on disk.
 
 #define MyAppName "MihaniSecurity"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.0.3"
 #define MyAppPublisher "MihaniSecurity Project"
 #define MyAppExeName "MihaniSecurity.exe"
 #define MyServiceExe "mihanisecurity-service.exe"
@@ -69,3 +69,4 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 ; Stop and remove the service. Wrapped in cmd so the uninstaller never shows
 ; an error if the service is already gone (sc returns nonzero in that case).
 Filename: "{cmd}"; Parameters: "/c sc stop MihaniSecurity & sc delete MihaniSecurity & exit /b 0"; Flags: runhidden; RunOnceId: "remove_service"
+

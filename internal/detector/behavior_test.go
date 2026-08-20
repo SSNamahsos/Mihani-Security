@@ -199,3 +199,46 @@ func TestBehaviorProcessInjectionNoVerdictOnOtherEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestBehaviorIFEODebugger(t *testing.T) {
+	d := NewBehavior()
+	vs := d.Evaluate(behaviorEvent(events.EventRegistrySet, nil, &events.RegistryOp{
+		Key:   `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\notepad.exe`,
+		Value: "Debugger",
+		Data:  `C:\evil\payload.exe`,
+	}))
+	if len(vs) != 1 {
+		t.Fatalf("expected 1 verdict, got %d", len(vs))
+	}
+	if vs[0].Threat != events.ThreatPersistence || vs[0].Severity != events.SeverityCritical {
+		t.Fatalf("unexpected verdict: %v", vs[0])
+	}
+}
+
+func TestBehaviorAppInitDLLs(t *testing.T) {
+	d := NewBehavior()
+	vs := d.Evaluate(behaviorEvent(events.EventRegistrySet, nil, &events.RegistryOp{
+		Key:   `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows`,
+		Value: "AppInit_DLLs",
+		Data:  `C:\evil\hook.dll`,
+	}))
+	if len(vs) != 1 {
+		t.Fatalf("expected 1 verdict, got %d", len(vs))
+	}
+	if vs[0].Threat != events.ThreatPersistence || vs[0].Severity != events.SeverityCritical {
+		t.Fatalf("unexpected verdict: %v", vs[0])
+	}
+}
+
+func TestBehaviorStartupFolderPlant(t *testing.T) {
+	d := NewBehavior()
+	e := behaviorEvent(events.EventFileCreate, nil, nil)
+	e.Path = `C:\Users\victim\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\stealer.exe`
+	vs := d.Evaluate(e)
+	if len(vs) != 1 {
+		t.Fatalf("expected 1 verdict, got %d", len(vs))
+	}
+	if vs[0].Threat != events.ThreatPersistence {
+		t.Fatalf("unexpected verdict: %v", vs[0])
+	}
+}

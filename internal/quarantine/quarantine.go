@@ -35,9 +35,11 @@ type Store struct {
 	indexPath string
 	maxBytes  int64
 	maxAge    time.Duration
+	encrypt   bool
+	key       []byte
 }
 
-func Open(dir string, maxBytes int64, maxAge time.Duration) (*Store, error) {
+func Open(dir string, maxBytes int64, maxAge time.Duration, encrypt bool) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -47,6 +49,10 @@ func Open(dir string, maxBytes int64, maxAge time.Duration) (*Store, error) {
 		indexPath: filepath.Join(dir, "index.json"),
 		maxBytes:  maxBytes,
 		maxAge:    maxAge,
+		encrypt:   encrypt,
+	}
+	if err := s.loadKey(); err != nil {
+		return nil, err
 	}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -96,8 +102,13 @@ func (s *Store) Add(path, threat, severity, evidence, verdictID string) (Entry, 
 		return Entry{}, err
 	}
 	h := sha256.New()
-	mw := io.MultiWriter(out, h)
-	n, err := io.Copy(mw, in)
+	var n int64
+	if s.encrypt {
+		n, err = s.encryptFile(in, out, h)
+	} else {
+		mw := io.MultiWriter(out, h)
+		n, err = io.Copy(mw, in)
+	}
 	if err != nil {
 		out.Close()
 		os.Remove(stored)
@@ -196,7 +207,22 @@ func (s *Store) Restore(id string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, in); err != nil {
+	if s.encrypt {
+		hdr := make([]byte, headerSize)
+		n, _ := io.ReadFull(in, hdr)
+		if _, serr := in.Seek(0, io.SeekStart); serr != nil {
+			out.Close()
+			return serr
+		}
+		if n == headerSize && string(hdr) == string(magicHeader) {
+			err = s.decryptFile(in, out)
+		} else {
+			_, err = io.Copy(out, in)
+		}
+	} else {
+		_, err = io.Copy(out, in)
+	}
+	if err != nil {
 		out.Close()
 		os.Remove(e.OriginalPath)
 		return err

@@ -30,6 +30,14 @@ export function LogTail(arg1) {
   return window['go']['app']['App']['LogTail'](arg1);
 }
 
+export function PickFile() {
+  return window['go']['app']['App']['PickFile']();
+}
+
+export function PickFolder() {
+  return window['go']['app']['App']['PickFolder']();
+}
+
 export function QuarantineDelete(arg1) {
   return window['go']['app']['App']['QuarantineDelete'](arg1);
 }

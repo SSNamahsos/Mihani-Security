@@ -18,6 +18,10 @@ export function Init(arg1:context.Context,arg2:any,arg3:any,arg4:any,arg5:any):P
 
 export function LogTail(arg1:number):Promise<Array<string>>;
 
+export function PickFile():Promise<string>;
+
+export function PickFolder():Promise<string>;
+
 export function QuarantineDelete(arg1:string):Promise<void>;
 
 export function QuarantineList():Promise<Array<Record<string, any>>>;

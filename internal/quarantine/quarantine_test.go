@@ -9,7 +9,7 @@ import (
 
 func TestAddRemovesOriginal(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir, 1024*1024, 30*24*time.Hour)
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,14 +32,94 @@ func TestAddRemovesOriginal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stored copy unreadable: %v", err)
 	}
-	if string(stored) != "malicious content" {
-		t.Fatalf("stored copy = %q, want original content", string(stored))
+	if string(stored) == "malicious content" {
+		t.Fatal("stored copy is plaintext; expected encrypted bytes")
+	}
+	if len(stored) <= headerSize || string(stored[:headerSize]) != string(magicHeader) {
+		t.Fatal("stored copy missing encryption header")
+	}
+	if entry.Size != int64(len("malicious content")) {
+		t.Fatalf("entry.Size = %d, want plaintext size", entry.Size)
+	}
+}
+
+func TestAddRestoreEncryptedRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("secret payload with sensitive content that must not sit on disk in plaintext")
+	src := filepath.Join(t.TempDir(), "stealer.exe")
+	if err := os.WriteFile(src, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	entry, err := s.Add(src, "Test", "critical", "evidence", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(entry.StoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) == len(payload) && string(raw) == string(payload) {
+		t.Fatal("quarantined file stored in plaintext")
+	}
+
+	if err := s.Restore(entry.ID); err != nil {
+		t.Fatalf("restore failed: %v", err)
+	}
+	got, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("restored content mismatch: got %q", string(got))
+	}
+}
+
+func TestRestoreLegacyPlainFile(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("legacy plain quarantined bytes")
+	src := filepath.Join(t.TempDir(), "old.exe")
+	if err := os.WriteFile(src, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := s.Add(src, "Test", "high", "evidence", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encrypted, err := os.ReadFile(entry.StoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry.StoredPath, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if string(encrypted) == string(payload) {
+		t.Fatal("setup error: encryption did not alter bytes")
+	}
+
+	if err := s.Restore(entry.ID); err != nil {
+		t.Fatalf("legacy restore failed: %v", err)
+	}
+	got, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("legacy restore content mismatch: got %q", string(got))
 	}
 }
 
 func TestAddMissingSource(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir, 1024*1024, 30*24*time.Hour)
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +135,7 @@ func TestAddMissingSource(t *testing.T) {
 
 func TestAddDedupe(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir, 1024*1024, 30*24*time.Hour)
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +164,7 @@ func TestAddDedupe(t *testing.T) {
 
 func TestRestoreMissingBin(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir, 1024*1024, 30*24*time.Hour)
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +189,7 @@ func TestRestoreMissingBin(t *testing.T) {
 }
 func TestDeleteRefusesPathOutsideQuarantine(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir, 1024*1024, 30*24*time.Hour)
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +209,7 @@ func TestDeleteRefusesPathOutsideQuarantine(t *testing.T) {
 
 func TestRestoreRefusesSystemLocation(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir, 1024*1024, 30*24*time.Hour)
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +233,7 @@ func TestLoadDropsEscapingEntries(t *testing.T) {
 	if err := os.WriteFile(good, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(dir, 1024*1024, 30*24*time.Hour)
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -186,3 +186,21 @@ packed/encrypted payload, and a process that tries to disable the service).
 | Substring "YARA-lite", raw-byte PE-import scan | `pkg/signatures/signatures.go` |
 | ~55-entry static signature DB, no updates | `assets/signatures/signatures.db`, `internal/service/service.go` |
 | Whole-file `os.ReadFile` in signature match | `pkg/signatures/signatures.go` (`MatchFile`) |
+
+---
+
+## Resolution status (v1.0.3)
+
+| # | Finding | Status | Where |
+|---|---------|--------|-------|
+| 2 | "Block" does not block | **Partial** — honest wording in UI/docs; post-hoc kill remains (no kernel deny possible in user mode) | `internal/detector/engine.go` |
+| 3 | No self-protection | **Done (user-mode)** — data dir ACL-hardened at service start (SYSTEM/Admins full, Users read-only, Everyone removed); service DACL replaced so non-admins cannot stop/config/delete. PPL/ELAM require a driver (not feasible here) | `pkg/winapi/selfprotect.go`, `internal/service/service.go` |
+| 4 | Named-pipe trusts the client | **Done** — every client connection resolved to its image path (GetNamedPipeClientProcessId); only the GUI exe (or files in the service dir) is accepted; rejections logged | `internal/ipc/auth_windows.go`, `internal/ipc/ipc.go` |
+| 5 | Signature engine is a toy (partial items) | **Partial** — PE-IMPORT now parses the real import table (dos/PE headers, section RVA mapping, import descriptors); `MatchFile` has a 32 MB cap (hash-only beyond, streamed). Real YARA, updates, unpacking: out of scope | `pkg/signatures/signatures.go` |
+| 9 | Limited persistence coverage | **Done** — added IFEO debugger / SilentProcessExit, AppInit_DLLs, and Startup-folder rules (registry + static cmdline + file-create), with tests | `internal/detector/detector.go`, `internal/detector/fileinspect.go` |
+| 10 | Quarantine "encryption" is a lie | **Done** — real per-entry AES-256-GCM (64 KB chunks, random nonce), key wrapped with DPAPI (`key.bin`), `Encrypt` config now honored and default true; legacy plaintext entries detected and migrated on restore; plaintext size + SHA256 stored | `internal/quarantine/crypto.go`, `internal/quarantine/quarantine.go` |
+| 11 | Token-guard allow-list is name-based | **Done** — a process claiming a legit owner name now must be **signed** (WinVerifyTrust) with a **matching publisher** (Discord Inc., Valve, Google, Microsoft, Mozilla, Brave, Opera, Vivaldi, Telegram); failures produce a critical "spoofed process" verdict | `pkg/tokens/trusted.go`, `pkg/winapi/signature.go`, `internal/detector/detector.go` |
+| 16 | Authenticated IPC | **Done** — client image-path allowlist (see #4) | `internal/ipc/` |
+| 1, 6, 7, 8, 12–15, 17–20 | Kernel driver, AMSI, ML, cloud reputation, ransomware, DNS/JA3, PPL, self-update, telemetry, E2E/CI | **Not feasible in this user-mode Go project** — require a signed kernel driver, an update backend, or a CI/CD account. Documented honestly here and in the READMEs | — |
+
+Tests added for: IPC auth, quarantine encryption round-trip + legacy migration, publisher allowlist + signature verification, PE import parsing (against real system DLLs), size-cap hash path, IFEO/AppInit/Startup behavior rules.

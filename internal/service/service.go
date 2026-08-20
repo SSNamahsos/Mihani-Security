@@ -26,6 +26,7 @@ import (
 	"github.com/mihanistudio/mihanisecurity/internal/monitor"
 	"github.com/mihanistudio/mihanisecurity/internal/quarantine"
 	sigpkg "github.com/mihanistudio/mihanisecurity/pkg/signatures"
+	"github.com/mihanistudio/mihanisecurity/pkg/winapi"
 )
 
 type program struct {
@@ -67,7 +68,7 @@ func Run(mode string) error {
 		log.Error().Err(err).Msg("open signature db")
 		return err
 	}
-	quar, err := quarantine.Open(cfg.Quarantine.Path, int64(cfg.Quarantine.MaxSizeMB)*1024*1024, time.Duration(cfg.Quarantine.MaxAgeDays)*24*time.Hour)
+	quar, err := quarantine.Open(cfg.Quarantine.Path, int64(cfg.Quarantine.MaxSizeMB)*1024*1024, time.Duration(cfg.Quarantine.MaxAgeDays)*24*time.Hour, cfg.Quarantine.Encrypt)
 	if err != nil {
 		log.Error().Err(err).Msg("open quarantine")
 		return err
@@ -160,6 +161,20 @@ func (p *program) run() {
 	}
 	p.started = true
 	p.mu.Unlock()
+
+	cfg0 := p.cfg.Get()
+	go func() {
+		if err := winapi.HardenDataDir(cfg0.General.DataPath); err != nil {
+			p.log.Warn().Err(err).Msg("data dir ACL hardening failed")
+		} else {
+			p.log.Info().Msg("data dir ACL hardened")
+		}
+		if err := winapi.HardenServiceACL("MihaniSecurity"); err != nil {
+			p.log.Warn().Err(err).Msg("service ACL hardening failed")
+		} else {
+			p.log.Info().Msg("service ACL hardened")
+		}
+	}()
 
 	pipeName := ipc.PipeName
 	p.pipe = ipc.NewServer(pipeName, p.handleClient)

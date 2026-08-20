@@ -52,7 +52,7 @@ func TestReportNeverTouchesProtectedAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err := quarantine.Open(filepath.Join(dir, "quarantine"), 1<<20, 30*24*time.Hour)
+	q, err := quarantine.Open(filepath.Join(dir, "quarantine"), 1<<20, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestApplyScanSkipsProtectedAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err := quarantine.Open(filepath.Join(dir, "quarantine"), 1<<20, 30*24*time.Hour)
+	q, err := quarantine.Open(filepath.Join(dir, "quarantine"), 1<<20, 30*24*time.Hour, true)
 	if err != nil {
 		t.Fatal(err)
 	}
