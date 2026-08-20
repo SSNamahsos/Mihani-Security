@@ -148,8 +148,9 @@ func Default() *Config {
 			ShowToast:        true,
 			PlaySound:        false,
 		},
-		Theme:    "mihani",
-		Language: "en",
+		Theme:      "mihani",
+		Language:   "en",
+		HideInTray: true,
 		Whitelist: []string{
 			"steam.exe",
 			"steamwebhelper.exe",
@@ -239,7 +240,15 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+
 	merged := mergeDefaults(Default(), &onDisk)
+	if _, ok := raw["hide_in_tray"]; !ok {
+		merged.HideInTray = true
+	}
 	if err := merged.Resolve(); err != nil {
 		return nil, err
 	}

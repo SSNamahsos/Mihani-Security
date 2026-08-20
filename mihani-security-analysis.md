@@ -204,3 +204,13 @@ packed/encrypted payload, and a process that tries to disable the service).
 | 1, 6, 7, 8, 12–15, 17–20 | Kernel driver, AMSI, ML, cloud reputation, ransomware, DNS/JA3, PPL, self-update, telemetry, E2E/CI | **Not feasible in this user-mode Go project** — require a signed kernel driver, an update backend, or a CI/CD account. Documented honestly here and in the READMEs | — |
 
 Tests added for: IPC auth, quarantine encryption round-trip + legacy migration, publisher allowlist + signature verification, PE import parsing (against real system DLLs), size-cap hash path, IFEO/AppInit/Startup behavior rules.
+
+---
+
+## Resolution status (v1.0.4)
+
+| # | Finding | Status | Where |
+|---|---------|--------|-------|
+| — | Closing the GUI stops the dashboard (no tray) | **Done** — closing hides to a native tray icon (dedicated message-loop thread; message-only window `MihaniSecurityTray`); tray menu Open/Exit; `HideWindowOnClose` + `hide_in_tray` config (default true, presence-aware merge for legacy configs). Protection itself always ran in the service and is unaffected by GUI state | `pkg/winapi/tray.go`, `internal/app/app.go`, `internal/config/config.go`, `main.go` |
+
+Tray tests: window creation on a dedicated thread, double-click and menu callbacks delivered through the tray message loop.

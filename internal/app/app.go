@@ -17,6 +17,7 @@ import (
 	"github.com/mihanistudio/mihanisecurity/internal/config"
 	"github.com/mihanistudio/mihanisecurity/internal/events"
 	"github.com/mihanistudio/mihanisecurity/internal/ipc"
+	"github.com/mihanistudio/mihanisecurity/pkg/winapi"
 )
 
 type App struct {
@@ -25,6 +26,7 @@ type App struct {
 	cli *ipc.Client
 
 	settings config.Config
+	tray     *winapi.Tray
 
 	onVerdict      func(events.Verdict)
 	onScanProgress func(events.ScanProgress)
@@ -40,6 +42,54 @@ func (a *App) Init(ctx context.Context, onVerdict func(events.Verdict), onScanPr
 	a.onScanProgress = onScanProgress
 	a.onScanResult = onScanResult
 	a.onStatus = onStatus
+	a.ensureTray()
+}
+
+func (a *App) ensureTray() {
+	a.mu.Lock()
+	lang := a.settings.Language
+	t := a.tray
+	a.mu.Unlock()
+	if lang == "" {
+		lang = "en"
+	}
+	if t != nil {
+		if t.Lang() == lang {
+			return
+		}
+		t.Remove()
+	}
+	var openLabel, quitLabel string
+	if lang == "fa" {
+		openLabel = "باز کردن MihaniSecurity"
+		quitLabel = "خروج"
+	} else {
+		openLabel = "Open MihaniSecurity"
+		quitLabel = "Exit"
+	}
+	nt, err := winapi.NewTray("MihaniSecurity", openLabel, quitLabel, lang, a.showWindow, a.quitApp)
+	if err != nil {
+		log.Println("tray:", err)
+		return
+	}
+	a.mu.Lock()
+	a.tray = nt
+	a.mu.Unlock()
+}
+
+func (a *App) showWindow() {
+	if a.ctx == nil {
+		return
+	}
+	runtime.WindowShow(a.ctx)
+	runtime.WindowSetAlwaysOnTop(a.ctx, true)
+	runtime.WindowSetAlwaysOnTop(a.ctx, false)
+}
+
+func (a *App) quitApp() {
+	if a.ctx != nil {
+		runtime.Quit(a.ctx)
+	}
 }
 
 func (a *App) Connect() error {
@@ -66,6 +116,10 @@ func (a *App) Disconnect() {
 	if a.cli != nil {
 		a.cli.Close()
 		a.cli = nil
+	}
+	if a.tray != nil {
+		a.tray.Remove()
+		a.tray = nil
 	}
 }
 
@@ -159,6 +213,7 @@ func (a *App) GetSettings() (config.Config, error) {
 		a.mu.Lock()
 		a.settings = c
 		a.mu.Unlock()
+		a.ensureTray()
 	}
 	return c, err
 }

@@ -24,20 +24,20 @@ var assets embed.FS
 func main() {
 	a := app.New()
 	err := wails.Run(&options.App{
-		Title:			"MihaniSecurity",
-		Width:			1100,
-		Height:			760,
-		MinWidth:		980,
-		MinHeight:		640,
-		DisableResize:		false,
-		Fullscreen:		false,
-		Frameless:		true,
-		StartHidden:		false,
-		HideWindowOnClose:	false,
+		Title:             "MihaniSecurity",
+		Width:             1100,
+		Height:            760,
+		MinWidth:          980,
+		MinHeight:         640,
+		DisableResize:     false,
+		Fullscreen:        false,
+		Frameless:         true,
+		StartHidden:       false,
+		HideWindowOnClose: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour:	&options.RGBA{R: 18, G: 4, B: 6, A: 1},
+		BackgroundColour: &options.RGBA{R: 18, G: 4, B: 6, A: 1},
 		OnStartup: func(ctx context.Context) {
 
 			a.Init(ctx,
@@ -51,14 +51,14 @@ func main() {
 				log.Println("ipc connect:", err)
 			}
 		},
-		OnShutdown:	func(ctx context.Context) { a.Disconnect() },
-		Bind:		[]interface{}{a},
+		OnShutdown: func(ctx context.Context) { a.Disconnect() },
+		Bind:       []interface{}{a},
 		Windows: &windows.Options{
-			WebviewIsTransparent:			false,
-			WindowIsTranslucent:			false,
-			DisableWindowIcon:			false,
-			DisableFramelessWindowDecorations:	false,
-			WebviewUserDataPath:			wailsUserData(),
+			WebviewIsTransparent:              false,
+			WindowIsTranslucent:               false,
+			DisableWindowIcon:                 false,
+			DisableFramelessWindowDecorations: false,
+			WebviewUserDataPath:               wailsUserData(),
 		},
 	})
 	if err != nil {
