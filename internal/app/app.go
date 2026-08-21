@@ -94,7 +94,6 @@ func (a *App) quitApp() {
 
 func (a *App) Connect() error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.cli == nil {
 		pipeName := ipc.PipeName
 		a.cli = ipc.NewClient(pipeName, a.onBroadcast)
@@ -104,10 +103,12 @@ func (a *App) Connect() error {
 			}
 		}
 	}
-	if a.cli.Connected() {
+	cli := a.cli
+	a.mu.Unlock()
+	if cli.Connected() {
 		return nil
 	}
-	return a.cli.ConnectRetry(10 * time.Second)
+	return cli.ConnectRetry(10 * time.Second)
 }
 
 func (a *App) ConnectService() error { return a.Connect() }

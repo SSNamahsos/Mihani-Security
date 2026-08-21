@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -148,9 +150,18 @@ func (s *Server) serve(c net.Conn) {
 	}
 	path, err := resolve(c)
 	if err != nil || !isAllowedPath(path, allowed) {
-		log.Printf("ipc: rejected client (path=%q err=%v)", path, err)
+		log.Printf("ipc: rejected client (path=%q err=%v allowed=%q)", path, err, allowed)
+		if f, err2 := os.OpenFile(filepath.Join(os.Getenv("ProgramData"), "MihaniSecurity", "logs", "ipc-clients.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
+			fmt.Fprintf(f, "%s rejected path=%q err=%v allowed=%q\n", time.Now().Format(time.RFC3339), path, err, allowed)
+			f.Close()
+		}
 		return
 	}
+	if f, err2 := os.OpenFile(filepath.Join(os.Getenv("ProgramData"), "MihaniSecurity", "logs", "ipc-clients.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err2 == nil {
+		fmt.Fprintf(f, "%s allowed path=%q\n", time.Now().Format(time.RFC3339), path)
+		f.Close()
+	}
+	log.Printf("ipc: allowed client (path=%q)", path)
 
 	rd := bufio.NewReaderSize(c, 64<<10)
 	for {

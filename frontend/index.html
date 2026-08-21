@@ -1631,40 +1631,21 @@ if (settings && settings.notifications && settings.notifications.show_toast) {
 case "status":
       status = data;
       connected = true;
-      reconnectBackoff = 0;
-      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       renderStatus();
       break;
 case "ipc_disconnected":
       connected = false;
       setPill("offline");
       showToast("info", t("t_reconnect"), "");
-      scheduleReconnect(1500);
+      setTimeout(() => { call("ConnectService").then(refreshStatus).catch(() => {}); }, 1500);
       break;
   }
-}
-
-let reconnectBackoff = 0;
-let reconnectTimer = null;
-function scheduleReconnect(delay) {
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  reconnectTimer = setTimeout(async () => {
-    try {
-      await call("ConnectService");
-      await refreshStatus();
-      reconnectBackoff = 0;
-    } catch (e) {
-      scheduleReconnect(Math.min(30000, 2000 * Math.pow(2, reconnectBackoff)));
-      reconnectBackoff++;
-    }
-  }, delay);
 }
 
 
 
 
 async function boot() {
-  
   if (!API) {
     const b = document.createElement("div");
     b.id = "demo-banner";

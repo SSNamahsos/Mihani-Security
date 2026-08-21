@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -249,10 +250,24 @@ func OpenStore(path string) (*Store, error) {
 	if _, ok := raw["hide_in_tray"]; !ok {
 		merged.HideInTray = true
 	}
+	if !merged.HideInTray {
+		if strings.Contains(strings.ToLower(merged.General.InstallPath), "build\\bin") {
+			merged.HideInTray = true
+		}
+	}
+	if strings.Contains(strings.ToLower(merged.General.InstallPath), "build\\bin") {
+		merged.General.InstallPath = ""
+	}
 	if err := merged.Resolve(); err != nil {
 		return nil, err
 	}
 	s.cfg = merged
+	if !onDisk.HideInTray && merged.HideInTray {
+		_ = s.save()
+	}
+	if strings.Contains(strings.ToLower(onDisk.General.InstallPath), "build\\bin") {
+		_ = s.save()
+	}
 	return s, nil
 }
 

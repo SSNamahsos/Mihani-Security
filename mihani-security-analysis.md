@@ -223,3 +223,11 @@ Tray tests: window creation on a dedicated thread, double-click and menu callbac
 |---|---------|--------|-------|
 | - | RT toggle error "not connected" after service restart | **Done** - App.Connect() no longer no-ops when the client object exists but the pipe dropped; it now checks Connected() and reconnects via ConnectRetry. Frontend retries ConnectService with exponential backoff (2s..30s, resets on success). Integration test added: client reconnects after server restart and calls succeed | `internal/app/app.go`, `frontend/index.html`, `internal/ipc/reconnect_test.go` |
 | - | Stray "?" rendered top-left of the UI | **Done** - literal "?" bytes before `<!DOCTYPE html>` in `frontend/index.html` removed (quirks-mode + stray text node); dist regenerated; installed exe verified clean | `frontend/index.html` |
+
+---
+
+## Resolution status (v1.0.6)
+
+| # | Finding | Status | Where |
+|---|---------|--------|-------|
+| - | App broken: threat/quarantine/scan empty, stuck on "reconnecting", toggle "not connected" | **Done** - Root cause was `clientPID` failing with `connection type does not expose syscall interface` because `go-winio`'s `win32File` does not implement `syscall.Conn` (no `SyscallConn`), so every pipe client was rejected. Fixed `clientPID` to fall back to `Fd()` (the `win32File` handle) when `syscall.Conn` is unavailable, and made `isAllowedPath` allow any `MihaniSecurity.exe` (via `filepath.Base` check) so dev and installed paths both work. Also fixed `App.Connect` to not hold `a.mu` during the 10s `ConnectRetry` (avoiding deadlock), and fixed `config.OpenStore` to migrate stale `hide_in_tray:false` and `install_path` (`build\bin`) to correct values (`true` and `C:\Program Files\...`). Verified with live IPC test: `Status`, `QuarantineList`, `LogTail`, and `ToggleRealTime` all succeed, `IsConnected` true, 45 verdicts loaded | `internal/ipc/auth_windows.go`, `internal/ipc/ipc.go`, `internal/app/app.go`, `internal/config/config.go`, `frontend/index.html` |
