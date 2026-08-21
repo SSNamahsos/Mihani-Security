@@ -231,3 +231,12 @@ Tray tests: window creation on a dedicated thread, double-click and menu callbac
 | # | Finding | Status | Where |
 |---|---------|--------|-------|
 | - | App broken: threat/quarantine/scan empty, stuck on "reconnecting", toggle "not connected" | **Done** - Root cause was `clientPID` failing with `connection type does not expose syscall interface` because `go-winio`'s `win32File` does not implement `syscall.Conn` (no `SyscallConn`), so every pipe client was rejected. Fixed `clientPID` to fall back to `Fd()` (the `win32File` handle) when `syscall.Conn` is unavailable, and made `isAllowedPath` allow any `MihaniSecurity.exe` (via `filepath.Base` check) so dev and installed paths both work. Also fixed `App.Connect` to not hold `a.mu` during the 10s `ConnectRetry` (avoiding deadlock), and fixed `config.OpenStore` to migrate stale `hide_in_tray:false` and `install_path` (`build\bin`) to correct values (`true` and `C:\Program Files\...`). Verified with live IPC test: `Status`, `QuarantineList`, `LogTail`, and `ToggleRealTime` all succeed, `IsConnected` true, 45 verdicts loaded | `internal/ipc/auth_windows.go`, `internal/ipc/ipc.go`, `internal/app/app.go`, `internal/config/config.go`, `frontend/index.html` |
+
+---
+
+## Resolution status (v1.0.7)
+
+| # | Finding | Status | Where |
+|---|---------|--------|-------|
+| - | Installer cannot close the app (file in use) — user had to kill service host manually | **Done** - Added `AppMutex` (`MihaniSecurityAppMutex`) to `main.go` (via `windows.CreateMutex` and `wails` `SingleInstanceLock`) and to `installer/MihaniSecurity.iss` (`AppMutex`, `CloseApplications`), and added `PrepareToInstall` that force-kills `MihaniSecurity.exe`/`mihanisecurity-service.exe` and `sc stop MihaniSecurity` before overwriting files. Ensures the service and GUI are stopped even when `HideWindowOnClose` hides to tray | `main.go`, `installer/MihaniSecurity.iss` |
+| - | App still on "connecting" after v1.0.6 install (service not updated) | **Done** - The v1.0.6 service fix (`clientPID` `Fd()` fallback) was not applied because the installer couldn't overwrite the running service binary. The v1.0.7 installer now stops the service before install, so the new service is correctly installed. Verified: fresh install shows `IsConnected` true, `GetSettings` ok, 45 verdicts, toggle works | `internal/ipc/auth_windows.go` (v1.0.6 fix) + installer fix |

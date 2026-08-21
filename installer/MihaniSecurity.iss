@@ -12,7 +12,7 @@
 ; our own files still being on disk.
 
 #define MyAppName "MihaniSecurity"
-#define MyAppVersion "1.0.6"
+#define MyAppVersion "1.0.7"
 #define MyAppPublisher "MihaniSecurity Project"
 #define MyAppExeName "MihaniSecurity.exe"
 #define MyServiceExe "mihanisecurity-service.exe"
@@ -39,6 +39,9 @@ PrivilegesRequired=admin
 MinVersion=10.0.17763
 DisableWelcomePage=no
 LicenseFile=..\LICENSE
+AppMutex=MihaniSecurityAppMutex
+CloseApplications=yes
+CloseApplicationsFilter=*.exe,*.dll,*.sys
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -60,10 +63,23 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 [Run]
 ; Register the protection service (runs elevated like the installer).
 Filename: "{app}\{#MyServiceExe}"; Parameters: "-mode install"; Flags: runhidden waituntilterminated
+Filename: "{cmd}"; Parameters: "/c sc start MihaniSecurity"; Flags: runhidden waituntilterminated; StatusMsg: "Starting protection service..."
 ; Trust the self-signed code-signing root so Windows Security Center accepts the product.
 Filename: "certutil.exe"; Parameters: "-addstore -f Root ""{app}\mihani-sign.cer"""; Flags: runhidden; StatusMsg: "Installing trusted certificate..."; Check: FileExists(ExpandConstant('{app}\mihani-sign.cer'))
 ; Launch the GUI once setup finishes.
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill', '/F /IM MihaniSecurity.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill', '/F /IM mihanisecurity-service.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{cmd}'), '/c sc stop MihaniSecurity', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1500);
+  Result := '';
+end;
 
 [UninstallRun]
 ; Stop and remove the service. Wrapped in cmd so the uninstaller never shows

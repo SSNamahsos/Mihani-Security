@@ -10,8 +10,9 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	winopts "github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"golang.org/x/sys/windows"
 
 	"github.com/mihanistudio/mihanisecurity/internal/app"
 	"github.com/mihanistudio/mihanisecurity/internal/events"
@@ -22,8 +23,13 @@ import (
 var assets embed.FS
 
 func main() {
+	mutexName, _ := windows.UTF16PtrFromString("MihaniSecurityAppMutex")
+	if mu, err := windows.CreateMutex(nil, false, mutexName); err == nil && mu != 0 {
+		defer windows.CloseHandle(mu)
+	}
 	a := app.New()
 	err := wails.Run(&options.App{
+		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "MihaniSecurityAppMutex"},
 		Title:             "MihaniSecurity",
 		Width:             1100,
 		Height:            760,
@@ -53,7 +59,7 @@ func main() {
 		},
 		OnShutdown: func(ctx context.Context) { a.Disconnect() },
 		Bind:       []interface{}{a},
-		Windows: &windows.Options{
+		Windows: &winopts.Options{
 			WebviewIsTransparent:              false,
 			WindowIsTranslucent:               false,
 			DisableWindowIcon:                 false,
