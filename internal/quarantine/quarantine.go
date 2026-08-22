@@ -37,6 +37,8 @@ type Store struct {
 	maxAge    time.Duration
 	encrypt   bool
 	key       []byte
+
+	OnBeforeRestoreWrite func(original, target string)
 }
 
 func Open(dir string, maxBytes int64, maxAge time.Duration, encrypt bool) (*Store, error) {
@@ -97,6 +99,11 @@ func (s *Store) Add(path, threat, severity, evidence, verdictID string) (Entry, 
 	}
 	defer in.Close()
 
+	var fi0 os.FileInfo
+	if fi0, err = in.Stat(); err != nil {
+		return Entry{}, err
+	}
+
 	out, err := os.OpenFile(stored, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return Entry{}, err
@@ -108,6 +115,20 @@ func (s *Store) Add(path, threat, severity, evidence, verdictID string) (Entry, 
 	} else {
 		mw := io.MultiWriter(out, h)
 		n, err = io.Copy(mw, in)
+	}
+	if err == nil {
+		var fi1 os.FileInfo
+		fi1, err = in.Stat()
+		if err == nil && fi1.Size() != fi0.Size() {
+			err = errSourceChangedDuringCapture
+		}
+	}
+	if errors.Is(err, errSourceChangedDuringCapture) {
+		out.Close()
+		os.Remove(stored)
+		in.Close()
+		time.Sleep(300 * time.Millisecond)
+		return s.Add(path, threat, severity, evidence, verdictID)
 	}
 	if err != nil {
 		out.Close()
@@ -179,6 +200,9 @@ func (s *Store) Delete(id string) error {
 	return s.persistLocked()
 }
 
+var errAlreadyRestored = errors.New("identical file already present at original location")
+var errSourceChangedDuringCapture = errors.New("source file changed while being captured")
+
 func (s *Store) Restore(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -192,26 +216,47 @@ func (s *Store) Restore(id string) error {
 	if !s.restorableTarget(e.OriginalPath) {
 		return fmt.Errorf("refusing to restore into protected location: %s", e.OriginalPath)
 	}
-	if _, err := os.Stat(e.OriginalPath); err == nil {
-		return fmt.Errorf("refusing to overwrite existing file at %s", e.OriginalPath)
+	if e.Size == 0 {
+		return fmt.Errorf("nothing to restore: the original file was already gone when it was detected (%s); use Delete to remove this entry", filepath.Base(e.OriginalPath))
 	}
-	if err := os.MkdirAll(filepath.Dir(e.OriginalPath), 0o755); err != nil {
+	if _, err := os.Stat(e.StoredPath); err != nil {
+		return fmt.Errorf("quarantined copy of %s is missing from the vault; use Delete to remove this entry", filepath.Base(e.OriginalPath))
+	}
+
+	target, err := s.pickRestoreTarget(e)
+	if err == errAlreadyRestored {
+		delete(s.index, id)
+		if perr := s.persistLocked(); perr != nil {
+			return perr
+		}
+		return nil
+	}
+	if err != nil {
 		return err
+	}
+
+	if s.OnBeforeRestoreWrite != nil {
+		s.OnBeforeRestoreWrite(e.OriginalPath, target)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("cannot create destination folder: %w", err)
 	}
 	in, err := os.Open(e.StoredPath)
 	if err != nil {
-		return fmt.Errorf("quarantined file is missing (%s); it was probably removed externally, e.g. by another antivirus", e.StoredPath)
+		return fmt.Errorf("cannot open quarantined copy: %w", err)
 	}
 	defer in.Close()
-	out, err := os.OpenFile(e.OriginalPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot write %s: %w", target, err)
 	}
 	if s.encrypt {
 		hdr := make([]byte, headerSize)
 		n, _ := io.ReadFull(in, hdr)
 		if _, serr := in.Seek(0, io.SeekStart); serr != nil {
 			out.Close()
+			os.Remove(target)
 			return serr
 		}
 		if n == headerSize && string(hdr) == string(magicHeader) {
@@ -224,14 +269,38 @@ func (s *Store) Restore(id string) error {
 	}
 	if err != nil {
 		out.Close()
-		os.Remove(e.OriginalPath)
-		return err
+		os.Remove(target)
+		return fmt.Errorf("stored copy of %s is damaged and cannot be decrypted (%v); use Delete to remove this entry", filepath.Base(e.OriginalPath), err)
 	}
 	if err := out.Close(); err != nil {
+		os.Remove(target)
 		return err
 	}
 	delete(s.index, id)
 	return s.persistLocked()
+}
+
+func (s *Store) pickRestoreTarget(e Entry) (string, error) {
+	if _, err := os.Stat(e.OriginalPath); err != nil {
+		return e.OriginalPath, nil
+	}
+	if e.SHA256 != "" {
+		if h, herr := fileSHA256(e.OriginalPath); herr == nil && strings.EqualFold(h, e.SHA256) {
+			return "", errAlreadyRestored
+		}
+	}
+	ext := filepath.Ext(e.OriginalPath)
+	base := strings.TrimSuffix(e.OriginalPath, ext)
+	for i := 1; i < 100; i++ {
+		name := fmt.Sprintf("%s.restored%d%s", base, i, ext)
+		if i == 1 {
+			name = fmt.Sprintf("%s.restored%s", base, ext)
+		}
+		if _, err := os.Stat(name); err != nil {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no free name to restore beside existing file at %s", e.OriginalPath)
 }
 
 func (s *Store) List() []Entry {
@@ -363,4 +432,17 @@ func (s *Store) enforceLimitsLocked() {
 func newID() string {
 	now := time.Now().UnixNano()
 	return strings.ToLower(fmt.Sprintf("%x", now))
+}
+
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

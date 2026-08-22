@@ -1,6 +1,6 @@
 {
   "name": "mihanisecurity-frontend",
-  "version": "1.0.7",
+  "version": "1.0.9",
   "description": "MihaniSecurity Wails frontend",
   "scripts": {
     "build": "node build.mjs",

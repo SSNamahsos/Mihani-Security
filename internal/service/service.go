@@ -90,6 +90,11 @@ func Run(mode string) error {
 		quar:   quar,
 		engine: engine,
 	}
+	quar.OnBeforeRestoreWrite = func(original, target string) {
+		if err := prg.excludePaths(original, target); err != nil {
+			log.Warn().Err(err).Str("original", original).Str("target", target).Msg("restore exclusion failed")
+		}
+	}
 
 	s, err := service.New(prg, svcConfig)
 	if err != nil {
@@ -477,6 +482,33 @@ func (p *program) cancelScan(id string) {
 	if ok {
 		cancel()
 	}
+}
+
+func (p *program) excludePaths(paths ...string) error {
+	changed := false
+	err := p.cfg.Update(func(c *config.Config) {
+		for _, x := range paths {
+			x = strings.TrimSpace(x)
+			if x == "" {
+				continue
+			}
+			dup := false
+			for _, e := range c.Exclusions {
+				if strings.EqualFold(filepath.Clean(e), filepath.Clean(x)) {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				c.Exclusions = append(c.Exclusions, x)
+				changed = true
+			}
+		}
+	})
+	if err == nil && changed {
+		p.engine.ApplyConfig()
+	}
+	return err
 }
 
 func (p *program) status() events.Status {

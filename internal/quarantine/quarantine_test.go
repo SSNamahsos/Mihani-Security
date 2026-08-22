@@ -3,6 +3,7 @@ package quarantine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -250,5 +251,94 @@ func TestLoadDropsEscapingEntries(t *testing.T) {
 	}
 	if _, ok := s.index["ok"]; !ok {
 		t.Fatal("legitimate entry dropped by load")
+	}
+}
+
+func TestRestoreWhenAppRecreatedIdenticalFile(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("recreated identical content")
+	src := filepath.Join(t.TempDir(), "appdata.bin")
+	if err := os.WriteFile(src, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := s.Add(src, "Test", "high", "ev", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Restore(entry.ID); err != nil {
+		t.Fatalf("restore of identical recreated file should succeed: %v", err)
+	}
+	if _, ok := s.index[entry.ID]; ok {
+		t.Fatal("entry should be removed after successful restore of identical file")
+	}
+}
+
+func TestRestoreBesideRecreatedDifferentFile(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("original quarantined bytes")
+	src := filepath.Join(t.TempDir(), "leveldb.LOG")
+	if err := os.WriteFile(src, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := s.Add(src, "Test", "high", "ev", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("brand new app-written bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Restore(entry.ID); err != nil {
+		t.Fatalf("restore beside recreated file failed: %v", err)
+	}
+	got, err := os.ReadFile(strings.TrimSuffix(src, filepath.Ext(src)) + ".restored" + filepath.Ext(src))
+	if err != nil {
+		t.Fatalf(".restored sibling not created: %v", err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("sibling content mismatch: %q", string(got))
+	}
+	cur, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(cur) == string(payload) {
+		t.Fatal("existing app-owned file must not be overwritten")
+	}
+	if _, ok := s.index[entry.ID]; ok {
+		t.Fatal("entry should be removed after side-by-side restore")
+	}
+}
+
+func TestRestoreSourceMissingEntry(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, 1024*1024, 30*24*time.Hour, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(t.TempDir(), "gone.tmp")
+	entry, err := s.Add(missing, "Test", "high", "ev", "v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.Restore(entry.ID)
+	if err == nil {
+		t.Fatal("restore of source-missing capture must fail clearly")
+	}
+	if !strings.Contains(err.Error(), "nothing to restore") {
+		t.Fatalf("expected friendly message, got: %v", err)
+	}
+	if _, ok := s.index[entry.ID]; !ok {
+		t.Fatal("source-missing entry must stay listed for explicit delete")
 	}
 }

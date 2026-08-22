@@ -12,7 +12,7 @@
 ; our own files still being on disk.
 
 #define MyAppName "MihaniSecurity"
-#define MyAppVersion "1.0.7"
+#define MyAppVersion "1.0.9"
 #define MyAppPublisher "MihaniSecurity Project"
 #define MyAppExeName "MihaniSecurity.exe"
 #define MyServiceExe "mihanisecurity-service.exe"
@@ -39,9 +39,7 @@ PrivilegesRequired=admin
 MinVersion=10.0.17763
 DisableWelcomePage=no
 LicenseFile=..\LICENSE
-AppMutex=MihaniSecurityAppMutex
 CloseApplications=yes
-CloseApplicationsFilter=*.exe,*.dll,*.sys
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

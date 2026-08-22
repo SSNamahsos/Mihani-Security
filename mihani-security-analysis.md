@@ -240,3 +240,22 @@ Tray tests: window creation on a dedicated thread, double-click and menu callbac
 |---|---------|--------|-------|
 | - | Installer cannot close the app (file in use) — user had to kill service host manually | **Done** - Added `AppMutex` (`MihaniSecurityAppMutex`) to `main.go` (via `windows.CreateMutex` and `wails` `SingleInstanceLock`) and to `installer/MihaniSecurity.iss` (`AppMutex`, `CloseApplications`), and added `PrepareToInstall` that force-kills `MihaniSecurity.exe`/`mihanisecurity-service.exe` and `sc stop MihaniSecurity` before overwriting files. Ensures the service and GUI are stopped even when `HideWindowOnClose` hides to tray | `main.go`, `installer/MihaniSecurity.iss` |
 | - | App still on "connecting" after v1.0.6 install (service not updated) | **Done** - The v1.0.6 service fix (`clientPID` `Fd()` fallback) was not applied because the installer couldn't overwrite the running service binary. The v1.0.7 installer now stops the service before install, so the new service is correctly installed. Verified: fresh install shows `IsConnected` true, `GetSettings` ok, 45 verdicts, toggle works | `internal/ipc/auth_windows.go` (v1.0.6 fix) + installer fix |
+
+---
+
+## Resolution status (v1.0.8)
+
+| # | Finding | Status | Where |
+|---|---------|--------|-------|
+| - | Restore fails for files the owning app recreated (e.g. Discord `LOG`, Edge `Local State`) and for `[source missing]` captures; error text read like a permission failure | **Done** - `Restore` no longer refuses when the original path exists again: if the existing file is byte-identical (SHA256 match) restore counts as done and removes the entry; otherwise it restores side-by-side as `<name>.restored.<ext>` without touching the app-owned file. Size-0 captures report "nothing to restore: the original file was already gone when it was detected". All write/open failures are wrapped with the target path. Tests added: identical-recreated, different-content side-by-side, source-missing friendly error | `internal/quarantine/quarantine.go`, `internal/quarantine/quarantine_test.go` |
+| - | Windows toast notifications never shown (only in-app toasts) | **Done** - `toast.SetAppData()` was never called, so the AUMID `MihaniSecurity` was unregistered and Windows silently dropped every toast. The GUI now registers `HKCU\SOFTWARE\Classes\AppUserModelId\MihaniSecurity` (DisplayName + IconUri + ActivationExe) at startup via `initToast()`, and clicking a toast reopens the window through the activation callback | `internal/app/app.go` |
+
+---
+
+## Resolution status (v1.0.9)
+
+| # | Finding | Status | Where |
+|---|---------|--------|-------|
+| - | Restored files instantly re-quarantined by real-time protection (restore appeared to do nothing) | **Done** - `Store.OnBeforeRestoreWrite` hook fires under the store lock before the file is written; the service uses it to add the original and target paths to `Exclusions` and reload engine config, so real-time monitors and on-demand scans skip the restored file (Defender-style "restore & allow"). Verified end-to-end: a live-detected file was restored via IPC, kept its exact content on disk past 10s with zero new verdicts, exclusion persisted in config.json | `internal/quarantine/quarantine.go`, `internal/service/service.go` |
+| - | Vault entries captured mid-write produced corrupt encrypted copies ("cipher: message authentication failed" on restore) | **Done** - `Add()` now stats the source before and after reading; if the size changed (file still being written) it deletes the partial capture and retries once. Damaged stored copies now report "stored copy is damaged and cannot be decrypted; use Delete to remove this entry" instead of a raw cipher error | `internal/quarantine/quarantine.go` |
+| - | `/VERYSILENT` installs silently did nothing when the GUI was running (`AppMutex` aborts before `PrepareToInstall`) | **Done** - removed `AppMutex` from the installer script; `PrepareToInstall` (taskkill GUI + service, sc stop) is now the single deterministic close path and runs in silent installs too. Verified: installed v1.0.9 over a running GUI without any manual killing; binaries replaced, service restarted | `installer/MihaniSecurity.iss` |

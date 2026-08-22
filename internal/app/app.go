@@ -42,7 +42,25 @@ func (a *App) Init(ctx context.Context, onVerdict func(events.Verdict), onScanPr
 	a.onScanProgress = onScanProgress
 	a.onScanResult = onScanResult
 	a.onStatus = onStatus
+	a.initToast()
 	a.ensureTray()
+}
+
+func (a *App) initToast() {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = ""
+	}
+	ad := toast.AppData{AppID: "MihaniSecurity", ActivationExe: exe}
+	if icon := findIconPath(""); icon != "" {
+		ad.IconPath = icon
+	}
+	if err := toast.SetAppData(ad); err != nil {
+		log.Println("toast appdata:", err)
+	}
+	toast.SetActivationCallback(func(args string, data []toast.UserData) {
+		a.showWindow()
+	})
 }
 
 func (a *App) ensureTray() {
